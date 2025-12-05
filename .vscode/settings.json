@@ -1,0 +1,19 @@
+{
+    // correct Python interpreter
+    "python.defaultInterpreterPath": "${workspaceFolder}/.venv/bin/python",
+    // make src a top level import root
+    "python.analysis.extraPaths": [
+        "src"
+    ],
+    "python.analysis.autoImportCompletions": true,
+    // formatting (new style with the Black extension)
+    "[python]": {
+        "editor.defaultFormatter": "ms-python.black-formatter"
+    },
+    "editor.formatOnSave": true,
+    // linting (new style with Ruff)
+    "ruff.enable": true,
+    "ruff.lint.enable": true,
+    // if you want type checking
+    "python.analysis.typeCheckingMode": "basic"
+}

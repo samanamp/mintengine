@@ -1,0 +1,5 @@
+black>=25.11.0
+huggingface-hub>=1.1.7
+ruff>=0.14.8
+safetensors>=0.7.0
+torch>=2.9.1
