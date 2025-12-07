@@ -1,5 +1,5 @@
 [project]
-name = "inferlite-engine"
+name = "mintengine"
 version = "0.1.0"
 description = "Add your description here"
 readme = { file = "README.md", content-type = "text/markdown", charset = "utf-8" }
@@ -13,8 +13,8 @@ dependencies = [
     "torch>=2.9.1",
 ]
 [tool.uv.sources]
-inferlite = { path = "src/inferlite" }
+mintengine = { path = "src/mintengine" }
 [project.scripts]
-inferlite = "inferlite.inferlite:main"
+mintengine = "mintengine.mintengine:main"
 [tool.setuptools.packages.find]
 where = ["src"]

@@ -1,0 +1,2 @@
+[console_scripts]
+mintengine = mintengine.mintengine:main

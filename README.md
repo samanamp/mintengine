@@ -1,24 +1,24 @@
-# inferlite-engine
+# mintengine
 
-Install inferlite:
+Install mintengine:
 ```
 uv sync
 uv pip install -e .
 ```
 
-Run Inferlite:
+Run mintengine:
 ```
-uv run inferlite
+uv run mintengine
 
 For accessing gated model
 ```
-HF_TOKEN=hf_xxxxx uv run inferlite
+HF_TOKEN=hf_xxxxx uv run mintengine
 ```
 
 For windows
 ```
 $env:HF_TOKEN = "hf_xxxxx"
-uv run inferlite
+uv run mintengine
 ```
 
 ## References

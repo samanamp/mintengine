@@ -1,2 +1,0 @@
-[console_scripts]
-inferlite = inferlite.inferlite:main

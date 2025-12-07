@@ -1,0 +1,40 @@
+Metadata-Version: 2.4
+Name: mintengine
+Version: 0.1.0
+Summary: Add your description here
+Requires-Python: >=3.14
+Description-Content-Type: text/markdown
+Requires-Dist: black>=25.11.0
+Requires-Dist: huggingface-hub>=1.1.7
+Requires-Dist: ruff>=0.14.8
+Requires-Dist: safetensors>=0.7.0
+Requires-Dist: sentencepiece>=0.2.1
+Requires-Dist: torch>=2.9.1
+
+# mintengine
+
+Install mintengine:
+```
+uv sync
+uv pip install -e .
+```
+
+Run mintengine:
+```
+uv run mintengine
+
+For accessing gated model
+```
+HF_TOKEN=hf_xxxxx uv run mintengine
+```
+
+For windows
+```
+$env:HF_TOKEN = "hf_xxxxx"
+uv run mintengine
+```
+
+## References
+We are using the following references for architecture and code correctness.
+
+[vLLM - Add support for Gemma 3](https://github.com/vllm-project/vllm/pull/14660)
