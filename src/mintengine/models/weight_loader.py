@@ -1,5 +1,6 @@
 import os
 from safetensors import safe_open
+import torch
 
 
 def analyze_weight_sizes(tensors):
@@ -76,7 +77,7 @@ def format_size(num_bytes):
         return f"{num_bytes} bytes"
 
 
-def load_all_tensors(model_dir, device="cpu"):
+def load_all_tensors(model_dir, device: str):
     entries = []
     tensors = {}
     total_bytes = 0
