@@ -3,8 +3,8 @@ from pathlib import Path
 import torch
 import torch.nn as nn
 from huggingface_hub import snapshot_download
-from inferlite.models.gemma3 import Gemma3Weights
-from inferlite.weight_loader import load_all_tensors
+from mintengine.models.gemma3 import Gemma3Weights
+from mintengine.weight_loader import load_all_tensors
 
 import sentencepiece as spm
 
