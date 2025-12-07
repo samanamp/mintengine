@@ -9,6 +9,7 @@ dependencies = [
     "huggingface-hub>=1.1.7",
     "ruff>=0.14.8",
     "safetensors>=0.7.0",
+    "sentencepiece>=0.2.1",
     "torch>=2.9.1",
 ]
 [tool.uv.sources]

@@ -20,3 +20,8 @@ For windows
 $env:HF_TOKEN = "hf_xxxxx"
 uv run inferlite
 ```
+
+## References
+We are using the following references for architecture and code correctness.
+
+[vLLM - Add support for Gemma 3](https://github.com/vllm-project/vllm/pull/14660)
