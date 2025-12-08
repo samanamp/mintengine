@@ -8,7 +8,8 @@ from mintengine.models.gemma3 import Gemma3
 
 def main():
     gemma_model = Gemma3()
-    gemma_model.generate("Hello World!")
+    out = gemma_model.generate("Hello World!")
+    print(out)
 
 
 if __name__ == "__main__":

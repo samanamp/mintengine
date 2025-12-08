@@ -3,19 +3,19 @@ import torch
 
 class AttentionWeights:
     def __init__(self):
-        self.k_norm = None
-        self.k_proj = None
-        self.o_proj = None
-        self.q_norm = None
-        self.q_proj = None
-        self.v_proj = None
+        self.k_norm: torch.Tensor
+        self.k_proj: torch.Tensor
+        self.o_proj: torch.Tensor
+        self.q_norm: torch.Tensor
+        self.q_proj: torch.Tensor
+        self.v_proj: torch.Tensor
 
 
 class MLPWeights:
     def __init__(self):
-        self.gate_proj = None
-        self.up_proj = None
-        self.down_proj = None
+        self.gate_proj: torch.Tensor
+        self.up_proj: torch.Tensor
+        self.down_proj: torch.Tensor
 
 
 class LayerWeights:
