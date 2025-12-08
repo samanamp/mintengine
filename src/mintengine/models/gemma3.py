@@ -59,7 +59,7 @@ class Gemma3Atttention(nn.Module):
     def __init__(self, weights: AttentionWeights):
         super().__init__()
         self.weights: AttentionWeights = weights
-
+        self.num_kv_heads = 1  # Gemma uses 1 KV head
         k_proj_w = weights.k_proj
         [dh, d] = k_proj_w.shape
         self.device = k_proj_w.device
@@ -67,7 +67,7 @@ class Gemma3Atttention(nn.Module):
         self.k_layer = nn.Linear(d, dh, bias=False, device=self.device)
         self.k_layer.weight.data = k_proj_w
 
-        self.k_norm_layer = nn.RMSNorm(dh)
+        self.k_norm_layer = nn.RMSNorm(dh, eps=1e-6)
         self.k_norm_layer.weight.data = weights.k_norm
 
         q_proj_w = weights.q_proj
@@ -77,7 +77,7 @@ class Gemma3Atttention(nn.Module):
         self.q_layer = nn.Linear(d, dh, bias=False, device=self.device)
         self.q_layer.weight.data = q_proj_w
 
-        self.q_norm_layer = nn.RMSNorm(self.head_dim)
+        self.q_norm_layer = nn.RMSNorm(self.head_dim, eps=1e-6)
         self.q_norm_layer.weight.data = weights.q_norm
 
         v_proj_w = weights.v_proj
@@ -91,40 +91,40 @@ class Gemma3Atttention(nn.Module):
         self.o_layer.weight.data = o_proj_w
 
     def forward(self, x):
-        print(f"{x.shape=}")
+        # print(f"{x.shape=}")
         length = x.shape[-2]
         batch = x.shape[0]
-        print("length=", length)
+        # print("length=", length)
 
         k_o = self.k_layer(x)
-        print(f"{k_o.shape=}")
+        # print(f"{k_o.shape=}")
         k_o = self.k_norm_layer(k_o)
-        print(f"{k_o.shape=}")
+        # print(f"{k_o.shape=}")
 
         q_o = self.q_layer(x)
-        print(f"{q_o.shape=}")
+        # print(f"{q_o.shape=}")
         q_o_view = q_o.view(batch, length, self.num_heads, self.head_dim)
-        print(f"{q_o_view.shape=}")
+        # print(f"{q_o_view.shape=}")
 
         q_o = self.q_norm_layer(q_o_view)
         q_o = q_o.permute(0, 2, 1, 3)  # [batch, num_heads, L, head_dim]
-        print(f"*{q_o.shape=}")
+        # print(f"*{q_o.shape=}")
 
         v_o = self.v_layer(x)
-        print(f"{v_o.shape=}")
+        # print(f"{v_o.shape=}")
 
         num_kv_heads = 1
         k_o = k_o.view(batch, length, num_kv_heads, self.head_dim).transpose(1, 2)
         v_o = v_o.view(batch, length, num_kv_heads, self.head_dim).transpose(1, 2)
 
-        if num_kv_heads == 1:
+        if self.num_kv_heads < self.num_heads:
             k_o = k_o.expand(
                 batch, self.num_heads, length, self.head_dim
             )  # [batch, num_heads, L, head_dim]
             v_o = v_o.expand(
                 batch, self.num_heads, length, self.head_dim
             )  # [batch, num_heads, L, head_dim]
-        print(f"*{v_o.shape=}\n*{k_o.shape=}")
+        # print(f"*{v_o.shape=}\n*{k_o.shape=}")
         rope_theta = 1_000_000
         q_o, k_o = apply_rope(q_o, k_o, rope_theta=rope_theta)
 
@@ -136,20 +136,30 @@ class Gemma3Atttention(nn.Module):
         # v_o = v_o.permute(1, 0, 2).unsqueeze(0)  # [1, num_heads, L, head_dim]
 
         qk = torch.matmul(q_o, k_o.transpose(-1, -2))
-        scores = qk / sqrt(self.head_dim)
-        print(f"{scores.shape=}")
-        weights = torch.softmax(scores, dim=-1)
-        print(f"{weights.shape=}")
-        context = torch.matmul(weights, v_o)
-        print(f"{context.shape=}")
+        scores = qk / sqrt(256)
 
-        context = context.permute(0, 1, 2, 3)
-        print("context", context.shape)
+        # Add causal mask
+        mask = torch.triu(
+            torch.ones(length, length, device=self.device, dtype=scores.dtype),
+            diagonal=1,
+        )
+        mask = mask.masked_fill(mask == 1, float("-inf"))
+
+        scores = scores + mask  # Broadcast over batch and heads
+
+        # print(f"{scores.shape=}")
+        weights = torch.softmax(scores, dim=-1)
+        # print(f"{weights.shape=}")
+        context = torch.matmul(weights, v_o)
+        # print(f"{context.1shape=}")
+
+        context = context.permute(0, 2, 1, 3)
+        # print("context", context.shape)
         context = context.reshape(batch, length, self.num_heads * self.head_dim)
-        print("context", context.shape)
+        # print("context", context.shape)
 
         att_proj_o = self.o_layer(context)
-        print(f"{att_proj_o.shape=}")
+        # print(f"{att_proj_o.shape=}")
         x = att_proj_o
         return x
 
@@ -162,7 +172,7 @@ class Gemma3MLP(nn.Module):
         self.gate_up_proj_w = torch.concat(
             (self.weights.gate_proj, self.weights.up_proj)
         ).T
-        self.activation_func = nn.GELU()
+        self.activation_func = nn.GELU(approximate="tanh")
 
     def forward(self, x):
         # MLP(x) = W_down( GELU(W_gate x) * (W_up x) )
@@ -225,6 +235,7 @@ class Gemma3Decoder(nn.Module):
 
     def forward(self, input_ids: torch.Tensor):
         hidden = self.embedding_layer(input_ids)
+        hidden = hidden * (self.weights.embed_tokens.shape[1] ** 0.5)
         for layer in self.layers:
             hidden = layer(hidden)
         hidden = self.final_norm(hidden)
@@ -243,7 +254,7 @@ class Gemma3:
         )
         self.decoder = Gemma3Decoder(self.gemma3_weights)
 
-    def generate(self, text: str, max_tokens: int = 2):
+    def generate(self, text: str, max_tokens: int = 10):
         input_ids = self.tokenizer.encode(text)
         result_ids = self._generate_from_ids(input_ids, max_tokens)
         print(f"{result_ids=}")
@@ -256,10 +267,13 @@ class Gemma3:
         result_tensor = result_tensor.unsqueeze(dim=0)
         for i in range(max_tokens):
             out = self.decoder(result_tensor)
-            next_token = torch.argmax(out[0, -1, :])
+            logits = out[0, -1, :]
+            # next_token = torch.argmax(out[0, -1, :])
+            # Add temperature sampling
+            temperature = 0.7
+            probs = torch.softmax(logits / temperature, dim=-1)
+            next_token = torch.multinomial(probs, num_samples=1)
             print(f"{next_token=}")
-            result_tensor = torch.cat(
-                (result_tensor, next_token.unsqueeze(0).unsqueeze(0)), dim=1
-            )
+            result_tensor = torch.cat((result_tensor, next_token.unsqueeze(0)), dim=1)
 
         return result_tensor
