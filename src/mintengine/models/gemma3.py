@@ -12,6 +12,48 @@ from mintengine.models.weight_loader import load_all_tensors
 import sentencepiece as spm
 
 
+class GemmaRMSNorm(nn.Module):
+    """RMS normalization for Gemma.
+
+    Two differences from the above RMSNorm:
+        1. x * (1 + w) instead of x * w.
+        2. (x * w).to(orig_dtype) instead of x.to(orig_dtype) * w.
+    """
+
+    def __init__(
+        self,
+        hidden_size: int,
+        eps: float = 1e-6,
+    ) -> None:
+        super().__init__()
+        self.weight = nn.Parameter(torch.zeros(hidden_size))
+        self.variance_epsilon = eps
+
+    def forward(
+        self,
+        x: torch.Tensor,
+        residual: torch.Tensor | None = None,
+    ) -> torch.Tensor | tuple[torch.Tensor, torch.Tensor]:
+        """PyTorch-native implementation equivalent to forward()."""
+        orig_dtype = x.dtype
+        if residual is not None:
+            x = (
+                x.float() + residual.float()
+                if orig_dtype == torch.float16
+                else x + residual
+            )
+            residual = x
+
+        x = x.float()
+        variance = x.pow(2).mean(dim=-1, keepdim=True)
+        x = x * torch.rsqrt(variance + self.variance_epsilon)
+        # Llama does x.to(float16) * w whilst Gemma is (x * w).to(float16)
+        # See https://github.com/huggingface/transformers/pull/29402
+        x = x * (1.0 + self.weight.float())
+        x = x.to(orig_dtype)
+        return x if residual is None else (x, residual)
+
+
 def apply_rope(q, k, rope_theta=1000000.0):
     """
     q, k: [batch, num_heads, L, head_dim]
@@ -69,7 +111,7 @@ class Gemma3Atttention(nn.Module):
         self.k_layer = nn.Linear(d, dh, bias=False, device=self.device)
         self.k_layer.weight.data = k_proj_w
 
-        self.k_norm_layer = nn.RMSNorm(dh, eps=1e-6)
+        self.k_norm_layer = GemmaRMSNorm(dh, eps=1e-6)
         self.k_norm_layer.weight.data = weights.k_norm
 
         q_proj_w = weights.q_proj
@@ -79,7 +121,7 @@ class Gemma3Atttention(nn.Module):
         self.q_layer = nn.Linear(d, dh, bias=False, device=self.device)
         self.q_layer.weight.data = q_proj_w
 
-        self.q_norm_layer = nn.RMSNorm(self.head_dim, eps=1e-6)
+        self.q_norm_layer = GemmaRMSNorm(self.head_dim, eps=1e-6)
         self.q_norm_layer.weight.data = weights.q_norm
 
         v_proj_w = weights.v_proj
@@ -91,6 +133,20 @@ class Gemma3Atttention(nn.Module):
         [dh, d] = o_proj_w.shape
         self.o_layer = nn.Linear(d, dh, bias=False, device=self.device)
         self.o_layer.weight.data = o_proj_w
+
+        sliding_window_pattern = 6
+        self.is_sliding = bool((layer_id + 1) % sliding_window_pattern)
+
+        if self.is_sliding:
+            # Local attention. Override the values in config.json.
+            rope_local_base_freq = 10000
+            self.rope_theta = rope_local_base_freq
+            # self.sliding_window = config.interleaved_sliding_window
+        else:
+            # Global attention. Use the values in config.json.
+            rope_theta = 1000000
+            self.rope_theta = rope_theta
+            # self.sliding_window = None
 
     def forward(self, x):
         # print(f"{x.shape=}")
@@ -134,8 +190,7 @@ class Gemma3Atttention(nn.Module):
                 batch, self.num_heads, length, self.head_dim
             )  # [batch, num_heads, L, head_dim]
         # print(f"*{v_o.shape=}\n*{k_o.shape=}")
-        rope_theta = 1_000_000
-        q_o, k_o = apply_rope(q_o, k_o, rope_theta=rope_theta)
+        q_o, k_o = apply_rope(q_o, k_o, rope_theta=self.rope_theta)
 
         # 7. Reorder to [batch, heads, seq, dim] for attention math
         # here batch size is 1
@@ -162,15 +217,6 @@ class Gemma3Atttention(nn.Module):
         # print(f"{weights.shape=}")
 
         context = torch.matmul(weights, v_o)
-        # print(f"{context.1shape=}")
-        # if self.layer_id == 25:
-        # print(f"k_o shape: {k_o.shape}")
-        # print(f"k_o[0, 0, 0, :5] (pos 0): {k_o[0, 0, 0, :5]}")
-        # print(f"k_o[0, 0, 1, :5] (pos 1): {k_o[0, 0, 1, :5]}")
-        # print(f"k_o[0, 0, 2, :5] (pos 2): {k_o[0, 0, 2, :5]}")
-        # print(f"k_o[0, 0, -1, :5] (last pos): {k_o[0, 0, -1, :5]}")
-        # print(f"Attention weights for last token: {weights[0, 0, -1, :]}")
-        # print(f"context: {context[0, 0, -1, :]}")
 
         context = context.permute(0, 2, 1, 3)
         # print("context", context.shape)
@@ -209,45 +255,99 @@ class Gemma3Layer(nn.Module):
         self.weights: LayerWeights = weights
 
         hidden_size = weights.input_layernorm.shape[0]
-        self.input_layernorm = nn.RMSNorm(hidden_size, eps=1e-6)
+        self.input_layernorm = GemmaRMSNorm(hidden_size, eps=1e-6)
         self.input_layernorm.weight.data = weights.input_layernorm
         self.attention = Gemma3Atttention(weights.self_attn, layer_id)
         self.mlp = Gemma3MLP(weights=weights.mlp)
-        self.post_attention_layernorm = nn.RMSNorm(hidden_size, eps=1e-6)
+        # self.post_attention_layernorm = nn.RMSNorm(hidden_size, eps=1e-6)
+        # self.post_attention_layernorm.weight.data = weights.post_attention_layernorm
+
+        self.post_attention_layernorm = GemmaRMSNorm(hidden_size=hidden_size)
         self.post_attention_layernorm.weight.data = weights.post_attention_layernorm
 
-        self.pre_feedforward_layernorm = nn.RMSNorm(hidden_size, eps=1e-6)
+        self.pre_feedforward_layernorm = GemmaRMSNorm(hidden_size, eps=1e-6)
         self.pre_feedforward_layernorm.weight.data = weights.pre_feedforward_layernorm
 
-        self.post_feedforward_layernorm = nn.RMSNorm(hidden_size, eps=1e-6)
+        self.post_feedforward_layernorm = GemmaRMSNorm(hidden_size, eps=1e-6)
         self.post_feedforward_layernorm.weight.data = weights.post_feedforward_layernorm
 
-    def forward(self, x):
+    def forward(self, x, residual):
+        vals: torch.Tensor = x[0, :, :]
+        if self.layer_id in [0]:
+            vals = vals.max(dim=0).values - vals.min(dim=0).values
+            print(
+                f"x-{self.layer_id}",
+                x.shape,
+                vals.mean().item(),
+            )
+        if residual is None:
+            residual = x
+            x = self.input_layernorm(x)
+        else:
+            x, residual = self.input_layernorm(x, residual)
 
         #  Attention
-        h1 = self.input_layernorm(x)
-        if self.layer_id == 1:
-            print("x-layer1", x.shape, x[0, :, 0:5])
-        if self.layer_id == 2:
-            print("x-layer2", x.shape, x[0, :, 0:5])
-        attn_out = self.attention(h1)
-        x = x + attn_out
-        # if self.layer_id == 25:
-        #     print("post attention", attn_out)
-        # post ATTN
-        x = self.post_attention_layernorm(x)
+        # h1 = self.input_layernorm(x)
+        vals: torch.Tensor = x[0, :, :]
+        if self.layer_id in [0, 1]:
+            vals = vals.max(dim=0).values - vals.min(dim=0).values
+            print(
+                f"input_layernorm-{self.layer_id}",
+                # h1.shape,
+                vals.mean().item(),
+            )
 
-        # if self.layer_id == 8:
-        #     print("x-layer8", x.shape, x[0, :, 0:5])
-        # Feed Forward (MLP)
-        h2 = self.pre_feedforward_layernorm(x)
-        ff_out = self.mlp(h2)
-        x = x + ff_out
+        x = self.attention(x)
+        vals: torch.Tensor = x[0, :, :]
+        if self.layer_id in [0, 1]:
+            vals = vals.max(dim=0).values - vals.min(dim=0).values
+            print(
+                f"attn_out-{self.layer_id}",
+                # attn_out.shape,
+                vals.mean().item(),
+            )
+
+        x = self.post_attention_layernorm(x)
+        vals: torch.Tensor = x[0, :, :]
+        if self.layer_id in [0, 1]:
+            vals = vals.max(dim=0).values - vals.min(dim=0).values
+            print(
+                f"postattn-norm:-{self.layer_id}",
+                # x.shape,
+                vals.mean().item(),
+            )
+
+        x, residual = self.pre_feedforward_layernorm(x, residual)
+        vals: torch.Tensor = x[0, :, :]
+        if self.layer_id in x[0, 1]:
+            vals = vals.max(dim=0).values - vals.min(dim=0).values
+            print(
+                f"preffn-norm: :-{self.layer_id}",
+                # x.shape,
+                vals.mean().item(),
+            )
+        ff_out = self.mlp(x)
+        vals: torch.Tensor = ff_out[0, :, :]
+        if self.layer_id in [0, 1]:
+            vals = vals.max(dim=0).values - vals.min(dim=0).values
+            print(
+                f"mlp: :-{self.layer_id}",
+                # x.shape,
+                vals.mean().item(),
+            )
+        x = ff_out
 
         # Post FFN
-        hidden = self.post_feedforward_layernorm(x)
-
-        return hidden
+        x = self.post_feedforward_layernorm(x)
+        vals: torch.Tensor = x[0, :, :]
+        if self.layer_id in [0, 1, 2, 3, 25]:
+            vals = vals.max(dim=0).values - vals.min(dim=0).values
+            print(
+                f"postffn-norm:{self.layer_id}",
+                # x.shape,
+                vals.mean().item(),
+            )
+        return x, residual
 
 
 class Gemma3Decoder(nn.Module):
@@ -256,7 +356,7 @@ class Gemma3Decoder(nn.Module):
         self.weights = weights
 
         self.embedding_layer = nn.Embedding.from_pretrained(self.weights.embed_tokens)
-        self.final_norm = nn.RMSNorm(self.weights.norm.shape[0], eps=1e-6)
+        self.final_norm = GemmaRMSNorm(self.weights.norm.shape[0], eps=1e-6)
         self.final_norm.weight.data = self.weights.norm
         self.layers = nn.ModuleList(
             [
@@ -270,8 +370,9 @@ class Gemma3Decoder(nn.Module):
 
         hidden = hidden * (self.weights.embed_tokens.shape[1] ** 0.5)
         # print(f"{hidden=}")
+        residual = None
         for layer in self.layers:
-            hidden = layer(hidden)
+            hidden, residual = layer(hidden, residual)
         hidden = self.final_norm(hidden)
         logits = torch.matmul(hidden, self.weights.embed_tokens.T)
         return logits
@@ -290,7 +391,7 @@ class Gemma3:
 
     def generate(self, text: str, max_tokens: int = 1):
         input_ids = self.tokenizer.encode(text)
-        result_ids = self._generate_from_ids(input_ids, max_tokens)
+        result_ids = self._generate_from_ids([2] + input_ids, max_tokens)
         print(f"{result_ids=}")
         return self.tokenizer.decode(result_ids[0].tolist())
 
