@@ -373,7 +373,7 @@ class Gemma3Decoder(nn.Module):
         residual = None
         for layer in self.layers:
             hidden, residual = layer(hidden, residual)
-        hidden = self.final_norm(hidden)
+        hidden, _ = self.final_norm(hidden, residual)
         logits = torch.matmul(hidden, self.weights.embed_tokens.T)
         return logits
 
@@ -389,7 +389,7 @@ class Gemma3:
         )
         self.decoder = Gemma3Decoder(self.gemma3_weights)
 
-    def generate(self, text: str, max_tokens: int = 1):
+    def generate(self, text: str, max_tokens: int = 50):
         input_ids = self.tokenizer.encode(text)
         result_ids = self._generate_from_ids([2] + input_ids, max_tokens)
         print(f"{result_ids=}")
@@ -403,16 +403,18 @@ class Gemma3:
         result_tensor = result_tensor.unsqueeze(dim=0)
         for i in range(max_tokens):
             out = self.decoder(result_tensor)
-            # print(out)
+            print(out.shape)
             logits = out[0, -1, :]
             # print(f"{logits=}")
-            # next_token = torch.argmax(out[0, -1, :])
+            next_token = torch.argmax(logits)
             # Add temperature sampling
-            temperature = 0.7
-            probs = torch.softmax(logits / temperature, dim=-1)
-            next_token = torch.multinomial(probs, num_samples=1)
+            # temperature = 0.0
+            # probs = torch.softmax(logits / temperature, dim=-1)
+            # next_token = torch.multinomial(probs, num_samples=1)
             print(f"{next_token=}")
-            result_tensor = torch.cat((result_tensor, next_token.unsqueeze(0)), dim=1)
+            result_tensor = torch.cat(
+                (result_tensor, next_token.unsqueeze(0).unsqueeze(0)), dim=1
+            )
             # print(f"{result_tensor=}")
 
         return result_tensor
