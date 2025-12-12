@@ -2,3 +2,18 @@ __pycache__/
 *.pyc
 *.egg-info/
 uv.lock
+
+# Ignore everything in the build directory except the PDF
+reports/gemma3/tex/build/*
+!reports/gemma3/tex/build/main.pdf
+
+# Ignore LaTeX auxiliary files anywhere
+*.aux
+*.log
+*.out
+*.toc
+*.fls
+*.fdb_latexmk
+*.synctex.gz
+*.bbl
+*.blg
