@@ -15,7 +15,7 @@ We need mathematical representation. In addition to that, we need reference impl
 
 You might say; hey, just the mathematical description and representation is enought!
 
-I would say the accurate implementation matters too. For example in RMSNorm, Llama does x.to(float16) * w whilst Gemma is (x.to(float) * w).to(float16). The former rounds the results, while the later performs the calculation in 32 bit precision first and then rounds it. This slight difference in implementation makes model be better in higher context lenghts.
+I would say the accurate implementation matters too. For example in RMSNorm, Llama does \texttt{x.to(float16) * w} whilst Gemma does \texttt{(x.to(float) * w).to(float16)}. The former rounds the results, while the later performs the calculation in 32 bit precision first and then rounds it. This slight difference in implementation makes model be better in higher context lenghts.
 
 And that's my motivation for creating metuculusly numerical checked implementation and share it along reports like this full of mathematical background of the subject.
 
