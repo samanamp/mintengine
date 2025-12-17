@@ -1,0 +1,85 @@
+\section{Rotary Positional Embeddings (RoPE)}
+
+Gemma-3 encodes positional information using \emph{rotary positional embeddings} (RoPE), which inject relative position information directly into the query and key vectors via rotation in feature space. Unlike additive positional embeddings, RoPE preserves relative distance information through inner products.
+
+Let
+\[
+Q, K \in \mathbb{R}^{B \times H \times T \times d_h}
+\]
+denote the query and key tensors, where $d_h$ is even.
+
+\subsection{Frequency Construction}
+
+The head dimension is split into two halves:
+\[
+d_h = 2d',
+\qquad
+Q = [Q^{(1)}, Q^{(2)}], \quad K = [K^{(1)}, K^{(2)}],
+\]
+with $Q^{(i)}, K^{(i)} \in \mathbb{R}^{B \times H \times T \times d'}$.
+
+For each dimension index $i \in \{0, \dots, d'-1\}$, the inverse frequency is defined as
+\[
+\omega_i = \frac{1}{\theta^{2i / d_h}},
+\]
+where $\theta$ is the RoPE base frequency (e.g., $\theta = 10^6$ for global attention).
+
+For sequence position $t \in \{0, \dots, T-1\}$, the rotation angle is
+\[
+\phi_{t,i} = t \cdot \omega_i.
+\]
+
+\subsection{Rotary Transformation}
+
+For each position $t$ and head, RoPE applies a complex-valued rotation to pairs of features:
+\[
+\begin{aligned}
+Q^{(1)}_{t,i} &\leftarrow Q^{(1)}_{t,i} \cos \phi_{t,i}
+              - Q^{(2)}_{t,i} \sin \phi_{t,i}, \\
+Q^{(2)}_{t,i} &\leftarrow Q^{(1)}_{t,i} \sin \phi_{t,i}
+              + Q^{(2)}_{t,i} \cos \phi_{t,i},
+\end{aligned}
+\]
+and analogously for $K$.
+
+This operation can be interpreted as a complex multiplication:
+\[
+(Q^{(1)} + i Q^{(2)}) \cdot (\cos \phi + i \sin \phi),
+\]
+applied independently for each position and head.
+
+\subsection{Application in Attention}
+
+The rotary embedding is applied \emph{before} computing attention scores:
+\[
+(Q, K) \leftarrow \operatorname{RoPE}(Q, K; \theta),
+\qquad
+A = \frac{Q K^\top}{\sqrt{d_h}}.
+\]
+
+Because both queries and keys are rotated by the same position-dependent transformation, the resulting dot product depends only on \emph{relative} positions:
+\[
+\langle Q_t, K_s \rangle
+=
+\langle Q_{t - s}, K_0 \rangle,
+\]
+up to a fixed phase shift. This property enables extrapolation to longer contexts than seen during training.
+
+\subsection{Design Choices in Gemma-3}
+
+Gemma-3 alternates RoPE configurations across layers:
+\begin{itemize}
+\item \textbf{Global attention layers}: large base frequency ($\theta = 10^6$) to support long-range dependencies.
+\item \textbf{Local (sliding) attention layers}: smaller base frequency ($\theta = 10^4$) to emphasize short-range structure.
+\end{itemize}
+
+This hybrid strategy balances global context modeling with strong local inductive bias.
+
+\subsection{Summary}
+
+\begin{itemize}
+\item RoPE encodes position via rotation, not addition.
+\item Relative positional information is preserved in dot products.
+\item No learned positional parameters are required.
+\item Large base frequencies enable long-context extrapolation.
+\end{itemize}

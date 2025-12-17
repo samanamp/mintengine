@@ -1,0 +1,195 @@
+\section{Self-Attention in Gemma-3}
+
+Gemma-3 employs a \emph{multi-query self-attention} (MQA) mechanism with per-head normalization and rotary positional embeddings. Let
+\[
+x \in \mathbb{R}^{B \times T \times d_{\text{model}}}
+\]
+denote the input hidden states for batch size $B$ and sequence length $T$.
+
+\subsection{Multi-Query Attention (MQA)}
+
+In Gemma-3, the number of query heads exceeds the number of key--value heads:
+\[
+H_Q > 1,
+\qquad
+H_{KV} = 1.
+\]
+All query heads attend to a single shared key--value representation. This formulation is known as \emph{multi-query attention} (MQA) and reduces memory bandwidth and KV-cache size during autoregressive decoding.
+
+\paragraph{MQA vs.\ GQA vs.\ MHA.}
+The attention mechanism in Gemma-3 belongs to the family of query--key head sharing schemes. These variants differ in the number of key--value heads relative to query heads:
+\[
+H_Q \ge H_{KV} \ge 1.
+\]
+
+\begin{itemize}
+\item \textbf{Multi-Head Attention (MHA):}
+\[
+H_{KV} = H_Q.
+\]
+Each query head has its own independent key and value heads. This maximizes expressivity but incurs the highest memory and bandwidth cost.
+
+\item \textbf{Grouped-Query Attention (GQA):}
+\[
+1 < H_{KV} < H_Q.
+\]
+Query heads are partitioned into groups, with each group sharing a key--value head. GQA trades a small loss in expressivity for reduced KV-cache size.
+
+\item \textbf{Multi-Query Attention (MQA):}
+\[
+H_{KV} = 1.
+\]
+All query heads attend to a single shared key--value representation. This minimizes KV-cache memory and improves decoding throughput, making it well-suited for long-context and inference-focused models.
+\end{itemize}
+
+In Gemma-3, the choice $H_{KV}=1$ reflects a design trade-off favoring inference efficiency over maximal per-head expressivity, with minimal observed impact on model quality at sufficient scale.
+
+\begin{figure}[h]
+\centering
+\begin{tikzpicture}[
+    node distance=0.6cm,
+    arrow/.style={->, thick},
+    q/.style={
+        draw,
+        rectangle,
+        rounded corners,
+        minimum width=1.4cm,
+        minimum height=0.6cm,
+        fill=green!10,
+        align=center
+    },
+    kv/.style={
+        draw,
+        rectangle,
+        rounded corners,
+        minimum width=1.4cm,
+        minimum height=0.6cm,
+        fill=blue!10,
+        align=center
+    }
+]
+
+% ===== MQA =====
+\node[draw=none, font=\small\bfseries] (mqa_title) {Multi-Query Attention (MQA)};
+\node[q, below=of mqa_title] (mq_q1) {$Q_1$};
+\node[q, below=of mq_q1] (mq_q2) {$Q_2$};
+\node[q, below=of mq_q2] (mq_qn) {$Q_H$};
+
+\node[kv, right=1.2cm of mq_q2] (mq_kv) {Shared\\$K,V$};
+
+\draw[arrow] (mq_q1.east) -- (mq_kv.west);
+\draw[arrow] (mq_q2.east) -- (mq_kv.west);
+\draw[arrow] (mq_qn.east) -- (mq_kv.west);
+
+% ===== GQA =====
+\node[draw=none, right=4.6cm of mqa_title, font=\small\bfseries] (gqa_title) {Grouped-Query Attention (GQA)};
+\node[q, below=of gqa_title] (gq_q1) {$Q_1$};
+\node[q, below=of gq_q1] (gq_q2) {$Q_2$};
+\node[q, below=of gq_q2] (gq_qn) {$Q_H$};
+
+\node[kv, right=1.2cm of gq_q1] (gq_kv1) {$K_1,V_1$};
+\node[kv, right=1.2cm of gq_qn] (gq_kv2) {$K_G,V_G$};
+
+\draw[arrow] (gq_q1.east) -- (gq_kv1.west);
+\draw[arrow] (gq_q2.east) -- (gq_kv1.west);
+\draw[arrow] (gq_qn.east) -- (gq_kv2.west);
+
+\end{tikzpicture}
+\caption{Comparison of Multi-Query Attention (MQA) and Grouped-Query Attention (GQA). In MQA, all query heads share a single key--value pair. In GQA, query heads are partitioned into groups, each with its own shared key--value head.}
+\end{figure}
+
+\subsection{Linear Projections and Normalization}
+
+Queries, keys, and values are computed as
+\[
+\begin{aligned}
+Q &= W_Q x, \\
+K &= W_K x, \\
+V &= W_V x,
+\end{aligned}
+\]
+with
+\[
+W_Q \in \mathbb{R}^{(H_Q d_h) \times d_{\text{model}}},
+\quad
+W_K, W_V \in \mathbb{R}^{d_h \times d_{\text{model}}},
+\]
+where $d_h$ is the head dimension.
+
+Keys are normalized using RMSNorm:
+\[
+K \leftarrow \operatorname{RMSNorm}(K),
+\]
+while queries are reshaped into heads and normalized per head:
+\[
+Q \in \mathbb{R}^{B \times H_Q \times T \times d_h},
+\qquad
+Q \leftarrow \operatorname{RMSNorm}(Q).
+\]
+Values are projected but not normalized.
+
+\subsection{Key--Value Head Expansion}
+
+Since $H_{KV} = 1$, the key and value tensors are broadcast across query heads:
+\[
+K, V \in \mathbb{R}^{B \times H_Q \times T \times d_h},
+\]
+ensuring that all query heads attend to the same key--value representations.
+
+\subsection{Rotary Positional Embeddings}
+
+Rotary positional embeddings are applied to queries and keys:
+\[
+(Q, K) \leftarrow \operatorname{RoPE}(Q, K; \theta),
+\]
+where the base frequency $\theta$ alternates by layer index:
+\begin{itemize}
+\item \textbf{Global attention layers}: $\theta = 10^6$,
+\item \textbf{Local (sliding) attention layers}: $\theta = 10^4$.
+\end{itemize}
+
+This interleaving enables a hybrid of long-range and local contextual modeling.
+
+\subsection{Attention Weights and Masking}
+
+Scaled dot-product attention is computed as
+\[
+A = \frac{Q K^\top}{\sqrt{d_h}},
+\]
+followed by a causal mask:
+\[
+A_{ij} =
+\begin{cases}
+A_{ij}, & j \le i, \\
+-\infty, & j > i.
+\end{cases}
+\]
+
+The attention weights are obtained via
+\[
+W = \operatorname{softmax}(A).
+\]
+
+\subsection{Context Aggregation and Output Projection}
+
+The context vectors are computed as
+\[
+C = W V \in \mathbb{R}^{B \times H_Q \times T \times d_h}.
+\]
+These are concatenated and projected back to the model dimension:
+\[
+\operatorname{Attention}(x)
+=
+W_O \, \operatorname{concat}_h(C),
+\qquad
+W_O \in \mathbb{R}^{d_{\text{model}} \times (H_Q d_h)}.
+\]
+
+\subsection{Summary}
+
+\begin{itemize}
+\item Gemma-3 uses \textbf{multi-query attention} with a single shared key--value head.
+\item Per-head RMSNorm stabilizes attention logits.
+\item Alternating RoPE frequencies enable local and global attention.
+\item Residual connections are managed outside the attention module.
+\end{itemize}
