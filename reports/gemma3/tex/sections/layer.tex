@@ -58,11 +58,11 @@
 
 % Residual initialization and updates
 \draw[res] (h0.east) -- ++(4.3,0) |- (residual.north);
-\draw[res] (residual.south) |- (inorm.east);
+\draw[res] (residual.west) |- (inorm.east);
 \draw[res] (residual.south) |- (prenorm.east);
 
 % Output arrows
-\draw[arrow] (residual.south) -- ++(0,0);
+\draw[arrow] (residual.south) -- ++(0,0) |- (hout.east);
 
 % Labels
 \node[draw=none, font=\small, align=left] at ($(residual)+(0,-1.2)$) {
