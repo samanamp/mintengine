@@ -13,8 +13,17 @@
 \usepackage{tikz}
 \usepackage{physics}
 \usepackage{mathtools}
-\usepackage{newtxtext}
-\usepackage{newtxmath}
+\usepackage{lmodern}
+\usepackage{firasans}
+\usepackage{sectsty}
+\usepackage{titlesec}
+\usepackage{fancyhdr}
+
+% Custom design
+\titlespacing*{\section}{0pt}{3.5ex plus 1ex minus .2ex}{2.3ex plus .2ex}
+\fancyhf{}
+\rhead{\thepage}
+\lhead{\sffamily\nouppercase{\leftmark}}
 
 % Geometry
 \geometry{
@@ -35,6 +44,8 @@
 \begin{document}
 
 \maketitle
+\pagestyle{fancy}
+\thispagestyle{fancy}
 
 
 % \begin{abstract}
@@ -46,7 +57,7 @@
 
 
 
-% \input{sections/architecture.tex}
+\input{sections/architecture.tex}
 % \input{sections/mathematics.tex}
 % \input{sections/attention.tex}
 % \input{sections/rope.tex}
