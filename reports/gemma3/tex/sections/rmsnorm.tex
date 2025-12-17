@@ -1,0 +1,42 @@
+\section{Gemma RMSNorm}
+
+Let $x \in \mathbb{R}^{d}$ denote the input activation. Gemma uses a modified RMSNorm defined as
+\[
+\operatorname{RMS}(x)
+= \sqrt{\frac{1}{d}\sum_{i=1}^{d} x_i^2 + \varepsilon},
+\qquad
+\hat{x} = \frac{x}{\operatorname{RMS}(x)}.
+\]
+
+The normalized activation is then scaled as
+\[
+\operatorname{GemmaRMSNorm}(x)
+= \hat{x} \odot (1 + \gamma),
+\]
+where $\gamma \in \mathbb{R}^{d}$ is a learned parameter initialized at zero.
+
+This differs from standard RMSNorm, which applies
+\[
+\operatorname{RMSNorm}(x) = \hat{x} \odot \gamma,
+\]
+typically with $\gamma$ initialized to ones. The Gemma formulation ensures that the initial transformation is the identity,
+\[
+\operatorname{GemmaRMSNorm}(x) \approx x \quad \text{at initialization},
+\]
+improving training stability.
+
+Additionally, Gemma applies scaling in full precision before casting back to the original dtype:
+\[
+x_{\text{out}} = \bigl(\hat{x} \odot (1 + \gamma)\bigr)_{\text{float}} \;\xrightarrow{\;\text{cast}\;}\; \text{orig\_dtype},
+\]
+which differs from implementations that cast first and then apply scaling. This ordering reduces numerical error in low-precision (e.g., FP16) training and inference.
+
+When residual connections are present, normalization is applied after residual accumulation:
+\[
+x \leftarrow x + r,
+\qquad
+r \leftarrow x,
+\qquad
+x_{\text{out}} = \operatorname{GemmaRMSNorm}(x),
+\]
+decoupling residual state from the normalized activation.

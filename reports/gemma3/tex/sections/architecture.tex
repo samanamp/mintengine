@@ -1,2 +1,31 @@
 \section{Architecture}
-I think the best approach to review the architecture of an LLM model is from top to bottom. 
+I think the best approach to review the architecture of an LLM model is from top to bottom. The core of Gemma3 is decoder architecture, sharing it in fig ~\ref{fig:gemma3-arch}.
+
+\begin{figure}[h]
+    \centering
+    \includegraphics[width=0.3\textwidth]{figures/gemma3-arch.png}
+    \caption{Gemma3 - high level architecture}
+    \label{fig:gemma3-arch}
+\end{figure}
+
+\subsection{Tokenizer}
+For tokenizer it's using SentencePieceProcessor tokenizer with vocab size of 262144. Nothing out of ordinary in this space, tokenizer model is shipped with the original model package and we can just load it with the same library.
+
+\subsection{Embedding}
+The model has hidden or embedding size of 1152. We're using nn.Embedding implementation to load embedding weights and apply embeding to the input ids. 
+
+After embedding, model does apply an scaling function:
+
+\[
+H^{(0)} = E[x] \in \mathbb{R}^{T \times d}
+\]
+
+\[
+H^{(0)} \leftarrow \sqrt{d} \cdot H^{(0)}
+\]
+
+This multiplying by $\sqrt{d_{\text{model}}}$ prevents embeddings from being numerically too small relative to QKV projections.
+
+
+As for the head, or where we want to turn embeddings into result ids, we use the same embedding weight transposed.
+
