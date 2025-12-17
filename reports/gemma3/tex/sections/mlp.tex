@@ -1,0 +1,116 @@
+\section{Gemma MLP}
+\begin{figure}[h]
+\centering
+\begin{tikzpicture}[
+    node distance=1.6cm,
+    every node/.style={draw, rectangle, rounded corners, minimum height=0.9cm, minimum width=2.2cm, align=center},
+    arrow/.style={->, thick}
+]
+
+% Nodes
+\node (x) {$x$};
+\node (gate) [right=of x] {$W_{\text{gate}} x$};
+\node (up) [below=of gate] {$W_{\text{up}} x$};
+
+\node (gelu) [right=of gate] {GELU};
+\node (mul) [right=of up, yshift=0.8cm] {$\odot$};
+
+\node (down) [right=of mul] {$W_{\text{down}}$};
+\node (out) [right=of down] {Output};
+
+% Arrows
+\draw[arrow] (x) -- (gate);
+\draw[arrow] (x) -- (up);
+
+\draw[arrow] (gate) -- (gelu);
+\draw[arrow] (gelu) -- (mul);
+
+\draw[arrow] (up) -- (mul);
+
+\draw[arrow] (mul) -- (down);
+\draw[arrow] (down) -- (out);
+
+\end{tikzpicture}
+\caption{Gated MLP used in Gemma. The gate and up projections are fused in implementation but shown separately for clarity.}
+\end{figure}
+
+The Gemma MLP is a gated feed-forward network applied independently at each token position. For an input activation
+\[
+x \in \mathbb{R}^{d_{\text{model}}},
+\]
+the MLP computes
+\[
+\operatorname{MLP}(x)
+=
+W_{\text{down}}
+\Bigl(
+\operatorname{GELU}_{\tanh}(W_{\text{gate}} x)
+\odot
+(W_{\text{up}} x)
+\Bigr),
+\]
+where
+\[
+W_{\text{gate}},\, W_{\text{up}} \in \mathbb{R}^{d_{\text{ff}} \times d_{\text{model}}},
+\qquad
+W_{\text{down}} \in \mathbb{R}^{d_{\text{model}} \times d_{\text{ff}}}.
+\]
+
+In implementation, the gate and up projections are fused into a single matrix multiplication:
+\[
+\begin{aligned}
+\left[g(x),\,u(x)\right]
+&=
+\begin{bmatrix}
+W_{\text{gate}} \\
+W_{\text{up}}
+\end{bmatrix}
+x, \\
+\operatorname{MLP}(x)
+&=
+W_{\text{down}}
+\bigl(
+\operatorname{GELU}_{\tanh}(g(x))
+\odot u(x)
+\bigr),
+\end{aligned}
+\]
+reducing memory reads and improving throughput.
+
+The activation function is the tanh-based approximation of GELU,
+\[
+\operatorname{GELU}_{\tanh}(z)
+=
+\frac{1}{2}z
+\left(
+1 + \tanh\!\left(
+\sqrt{\frac{2}{\pi}}
+\left(z + 0.044715\,z^3\right)
+\right)
+\right),
+\]
+which provides a smooth gating signal compared to other activation functions.
+\begin{figure}[h]
+    \centering
+    \includegraphics[width=0.5\textwidth]{figures/gelu-tanh.png}
+    \caption{Gelu and other activation functions}
+    \label{fig:gelu-tanh}
+\end{figure}
+
+Compared to a standard two-layer feed-forward network,
+\[
+\operatorname{FFN}(x) = W_2\,\sigma(W_1 x),
+\]
+the gated structure introduces multiplicative interactions that allow the model to dynamically control feature flow. This increases expressivity without additional depth and is a key contributor to Gemma’s strong performance per parameter.
+
+The MLP is used inside a pre-normalized residual block:
+\[
+h_{\ell+1}
+=
+h_\ell
++
+\operatorname{MLP}\!\left(
+\operatorname{RMSNorm}(h_\ell)
+\right),
+\]
+ensuring stable optimization in deep Transformer stacks.

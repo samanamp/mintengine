@@ -1,0 +1,162 @@
+\section{Gemma-3 Transformer Layer}
+\begin{figure}[h]
+\centering
+\begin{tikzpicture}[
+    node distance=0.55cm,
+    arrow/.style={->, thick},
+    res/.style={->, thick, dashed},
+    norm/.style={
+        draw,
+        rectangle,
+        rounded corners,
+        minimum height=0.75cm,
+        minimum width=3.3cm,
+        align=center,
+        fill=blue!8
+    },
+    compute/.style={
+        draw,
+        rectangle,
+        rounded corners,
+        minimum height=0.75cm,
+        minimum width=3.3cm,
+        align=center,
+        fill=green!8
+    },
+    state/.style={
+        draw,
+        rectangle,
+        rounded corners,
+        minimum height=0.75cm,
+        minimum width=3.3cm,
+        align=center,
+        fill=gray!10
+    }
+]
+
+% Main hidden-state path
+\node[state]   (h0)       {$h_\ell$};
+\node[norm]    (inorm)    [below=of h0] {Input RMSNorm\\{\scriptsize initializes / updates $r_\ell$}};
+\node[compute] (attn)     [below=of inorm] {Self-Attention};
+\node[norm]    (panorm)   [below=of attn] {Post-Attn RMSNorm};
+\node[norm]    (prenorm)  [below=of panorm] {Pre-FFN RMSNorm\\{\scriptsize updates $r_\ell$}};
+\node[compute] (mlp)      [below=of prenorm] {Gated MLP};
+\node[norm]    (postnorm) [below=of mlp] {Post-FFN RMSNorm};
+\node[state]   (hout)     [below=of postnorm] {$h_{\ell+1}$, , $r_{\ell+1}$};
+
+% Residual stream
+\node[state] (residual) [right=2.7cm of inorm] {$r_\ell$};
+
+% Hidden-state arrows
+\draw[arrow] (h0) -- (inorm);
+\draw[arrow] (inorm) -- (attn);
+\draw[arrow] (attn) -- (panorm);
+\draw[arrow] (panorm) -- (prenorm);
+\draw[arrow] (prenorm) -- (mlp);
+\draw[arrow] (mlp) -- (postnorm);
+\draw[arrow] (postnorm) -- (hout);
+
+% Residual initialization and updates
+\draw[res] (h0.east) -- ++(4.3,0) |- (residual.north);
+\draw[res] (residual.south) |- (inorm.east);
+\draw[res] (residual.south) |- (prenorm.east);
+
+% Output arrows
+\draw[arrow] (residual.south) -- ++(0,0);
+
+% Labels
+\node[draw=none, font=\small, align=left] at ($(residual)+(0,-1.2)$) {
+\textbf{Residual semantics}\\
+\textcolor{blue!60!black}{RMSNorm} updates $r_\ell$\\
+\textcolor{green!60!black}{Compute} blocks do not\\
+Dashed arrows indicate residual flow
+};
+
+\end{tikzpicture}
+\caption{Gemma-3 Transformer layer with explicit residual handling. The residual stream is initialized at the first RMSNorm, updated only at specific RMSNorm boundaries, and returned alongside the hidden state.}
+\end{figure}
+
+
+
+
+
+Each Gemma-3 layer follows a pre-normalized Transformer design with multiple RMSNorm stages and an explicit residual stream. Let
+\[
+h_\ell \in \mathbb{R}^{T \times d_{\text{model}}}
+\]
+denote the input to layer $\ell$, and let $r_\ell$ denote the residual accumulator.
+
+\subsection{Input Normalization and Residual Initialization}
+
+At the first layer, the residual is initialized directly from the input:
+\[
+r_\ell = h_\ell.
+\]
+The hidden state is then normalized using Gemma RMSNorm:
+\[
+\tilde{h}_\ell = \operatorname{RMSNorm}_{\text{in}}(h_\ell).
+\]
+
+For subsequent layers, residual accumulation and normalization are fused:
+\[
+(\tilde{h}_\ell, r_\ell) =
+\operatorname{RMSNorm}_{\text{in}}(h_\ell + r_{\ell-1}),
+\]
+ensuring that normalization always operates on the accumulated signal.
+
+\subsection{Self-Attention Block}
+
+The normalized hidden state is passed through multi-head self-attention:
+\[
+a_\ell = \operatorname{Attention}(\tilde{h}_\ell),
+\]
+followed by a post-attention RMS normalization:
+\[
+\hat{h}_\ell = \operatorname{RMSNorm}_{\text{attn}}(a_\ell).
+\]
+
+Unlike classic Transformer blocks, the attention output is not immediately added to the residual. Instead, residual updates are deferred and handled by subsequent normalization layers.
+
+\subsection{Feed-Forward Block}
+
+Before entering the MLP, the hidden state is again normalized while updating the residual:
+\[
+(\bar{h}_\ell, r_\ell) =
+\operatorname{RMSNorm}_{\text{pre-ffn}}(\hat{h}_\ell + r_\ell).
+\]
+
+The Gemma MLP is a gated feed-forward network:
+\[
+\operatorname{MLP}(x)
+=
+W_{\text{down}}
+\Bigl(
+\operatorname{GELU}_{\tanh}(W_{\text{gate}} x)
+\odot
+(W_{\text{up}} x)
+\Bigr).
+\]
+
+The MLP output is then normalized once more:
+\[
+h_{\ell+1}
+=
+\operatorname{RMSNorm}_{\text{post-ffn}}
+\bigl(
+\operatorname{MLP}(\bar{h}_\ell)
+\bigr).
+\]
+
+The layer returns both the transformed hidden state and the updated residual:
+\[
+(h_{\ell+1}, r_\ell).
+\]
+
+\subsection{Key Architectural Characteristics}
+
+\begin{itemize}
+\item Multiple RMSNorm stages are used to tightly control activation scale.
+\item Residual accumulation is explicitly separated from normalized activations.
+\item Attention and MLP blocks do not directly add to the residual, reducing variance explosion.
+\item All normalization layers use Gemma RMSNorm with $(1+\gamma)$ scaling.
+\end{itemize}

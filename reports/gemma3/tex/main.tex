@@ -18,6 +18,8 @@
 \usepackage{sectsty}
 \usepackage{titlesec}
 \usepackage{fancyhdr}
+\usepackage{tikz}
+\usetikzlibrary{arrows.meta, positioning, calc}
 
 % Custom design
 \titlespacing*{\section}{0pt}{3.5ex plus 1ex minus .2ex}{2.3ex plus .2ex}
@@ -59,10 +61,10 @@
 
 \input{sections/architecture.tex}
 
-
+\input{sections/layer.tex}
 % \input{sections/attention.tex}
 % \input{sections/rope.tex}
-% \input{sections/mlp.tex}
+\input{sections/mlp.tex}
 \input{sections/rmsnorm.tex}
 % \input{sections/conclusion.tex}
 
