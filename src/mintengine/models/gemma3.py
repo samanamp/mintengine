@@ -90,7 +90,7 @@ def apply_rope(q, k, rope_theta=1000000.0):
         x_1 = x[..., :half_dim]  # [B, L, H, half_dim]
         x_2 = x[..., half_dim:]  # [B, L, H, half_dim]
         # complex rotation (x_1 + i x_2) * (cos + i sin)
-        x_1_rot = x_1 * cos - x_2 * sin
+        x_1_rot = x_1 * cos + x_2 * sin
         x_2_rot = x_1 * sin + x_2 * cos
         return torch.cat([x_1_rot, x_2_rot], dim=-1)
 
