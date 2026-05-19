@@ -49,7 +49,7 @@ class GemmaRMSNorm(nn.Module):
         x = x * torch.rsqrt(variance + self.variance_epsilon)
         # Llama does x.to(float16) * w whilst Gemma is (x * w).to(float16)
         # See https://github.com/huggingface/transformers/pull/29402
-        x = x * (1.0 + self.weight.float())
+        x = x * (1.0 + self.weight)
         x = x.to(orig_dtype)
         return x if residual is None else (x, residual)
 
