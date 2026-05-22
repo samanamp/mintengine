@@ -1,0 +1,252 @@
+{
+  "setup": {
+    "model": "google/gemma-3-1b-it",
+    "device": "mps",
+    "configs": [
+      "rtn4_row",
+      "rtn4_g128",
+      "rtn4_g64",
+      "rtn4_g32",
+      "rtn4_g16",
+      "rtn4_g8"
+    ],
+    "input_sets": [
+      "random_s0",
+      "random_s1",
+      "self_s0",
+      "self_s1",
+      "self_s2",
+      "real_text"
+    ]
+  },
+  "results": {
+    "random_s0": [
+      {
+        "config": "rtn4_row",
+        "output_kl": 5.338712692260742,
+        "max_mse": 39486.45703125,
+        "worst_layer": 25
+      },
+      {
+        "config": "rtn4_g128",
+        "output_kl": 4.307171821594238,
+        "max_mse": 33158.25,
+        "worst_layer": 25
+      },
+      {
+        "config": "rtn4_g64",
+        "output_kl": 4.101423740386963,
+        "max_mse": 33153.14453125,
+        "worst_layer": 25
+      },
+      {
+        "config": "rtn4_g32",
+        "output_kl": 4.346494197845459,
+        "max_mse": 33169.3203125,
+        "worst_layer": 25
+      },
+      {
+        "config": "rtn4_g16",
+        "output_kl": 5.161834716796875,
+        "max_mse": 47251.359375,
+        "worst_layer": 25
+      },
+      {
+        "config": "rtn4_g8",
+        "output_kl": 4.323091506958008,
+        "max_mse": 33212.18359375,
+        "worst_layer": 25
+      }
+    ],
+    "random_s1": [
+      {
+        "config": "rtn4_row",
+        "output_kl": 4.012833118438721,
+        "max_mse": 36401.109375,
+        "worst_layer": 25
+      },
+      {
+        "config": "rtn4_g128",
+        "output_kl": 2.789259195327759,
+        "max_mse": 23594.509765625,
+        "worst_layer": 25
+      },
+      {
+        "config": "rtn4_g64",
+        "output_kl": 2.4040446281433105,
+        "max_mse": 20945.857421875,
+        "worst_layer": 25
+      },
+      {
+        "config": "rtn4_g32",
+        "output_kl": 2.2735517024993896,
+        "max_mse": 20732.0390625,
+        "worst_layer": 25
+      },
+      {
+        "config": "rtn4_g16",
+        "output_kl": 2.0338053703308105,
+        "max_mse": 17979.48828125,
+        "worst_layer": 25
+      },
+      {
+        "config": "rtn4_g8",
+        "output_kl": 1.9731523990631104,
+        "max_mse": 16296.5224609375,
+        "worst_layer": 25
+      }
+    ],
+    "self_s0": [
+      {
+        "config": "rtn4_row",
+        "output_kl": 2.530911922454834,
+        "max_mse": 30033.22265625,
+        "worst_layer": 25
+      },
+      {
+        "config": "rtn4_g128",
+        "output_kl": 1.2539985179901123,
+        "max_mse": 16883.9609375,
+        "worst_layer": 25
+      },
+      {
+        "config": "rtn4_g64",
+        "output_kl": 1.0354629755020142,
+        "max_mse": 16683.5234375,
+        "worst_layer": 25
+      },
+      {
+        "config": "rtn4_g32",
+        "output_kl": 0.5016447305679321,
+        "max_mse": 16931.00390625,
+        "worst_layer": 25
+      },
+      {
+        "config": "rtn4_g16",
+        "output_kl": 0.6242637634277344,
+        "max_mse": 11470.126953125,
+        "worst_layer": 25
+      },
+      {
+        "config": "rtn4_g8",
+        "output_kl": 0.632221519947052,
+        "max_mse": 9302.9375,
+        "worst_layer": 25
+      }
+    ],
+    "self_s1": [
+      {
+        "config": "rtn4_row",
+        "output_kl": 2.2725348472595215,
+        "max_mse": 29949.2734375,
+        "worst_layer": 25
+      },
+      {
+        "config": "rtn4_g128",
+        "output_kl": 1.2195451259613037,
+        "max_mse": 22131.56640625,
+        "worst_layer": 25
+      },
+      {
+        "config": "rtn4_g64",
+        "output_kl": 0.9984839558601379,
+        "max_mse": 20612.943359375,
+        "worst_layer": 25
+      },
+      {
+        "config": "rtn4_g32",
+        "output_kl": 1.1168769598007202,
+        "max_mse": 19331.5703125,
+        "worst_layer": 25
+      },
+      {
+        "config": "rtn4_g16",
+        "output_kl": 0.785687267780304,
+        "max_mse": 15401.46875,
+        "worst_layer": 25
+      },
+      {
+        "config": "rtn4_g8",
+        "output_kl": 0.6553401947021484,
+        "max_mse": 10022.93359375,
+        "worst_layer": 25
+      }
+    ],
+    "self_s2": [
+      {
+        "config": "rtn4_row",
+        "output_kl": 1.1246263980865479,
+        "max_mse": 12748.140625,
+        "worst_layer": 25
+      },
+      {
+        "config": "rtn4_g128",
+        "output_kl": 0.45709851384162903,
+        "max_mse": 6721.33984375,
+        "worst_layer": 25
+      },
+      {
+        "config": "rtn4_g64",
+        "output_kl": 0.3413827419281006,
+        "max_mse": 6343.40380859375,
+        "worst_layer": 25
+      },
+      {
+        "config": "rtn4_g32",
+        "output_kl": 0.3181883692741394,
+        "max_mse": 5548.076171875,
+        "worst_layer": 25
+      },
+      {
+        "config": "rtn4_g16",
+        "output_kl": 0.20405006408691406,
+        "max_mse": 3899.063720703125,
+        "worst_layer": 25
+      },
+      {
+        "config": "rtn4_g8",
+        "output_kl": 0.1597089022397995,
+        "max_mse": 2614.4677734375,
+        "worst_layer": 25
+      }
+    ],
+    "real_text": [
+      {
+        "config": "rtn4_row",
+        "output_kl": 0.6064639091491699,
+        "max_mse": 13201.97265625,
+        "worst_layer": 25
+      },
+      {
+        "config": "rtn4_g128",
+        "output_kl": 0.29737988114356995,
+        "max_mse": 5242.69189453125,
+        "worst_layer": 25
+      },
+      {
+        "config": "rtn4_g64",
+        "output_kl": 0.15670180320739746,
+        "max_mse": 4152.35791015625,
+        "worst_layer": 25
+      },
+      {
+        "config": "rtn4_g32",
+        "output_kl": 0.11995095759630203,
+        "max_mse": 3455.632080078125,
+        "worst_layer": 25
+      },
+      {
+        "config": "rtn4_g16",
+        "output_kl": 0.11358711868524551,
+        "max_mse": 2393.0546875,
+        "worst_layer": 25
+      },
+      {
+        "config": "rtn4_g8",
+        "output_kl": 0.08174923807382584,
+        "max_mse": 1718.77001953125,
+        "worst_layer": 25
+      }
+    ]
+  }
+}
