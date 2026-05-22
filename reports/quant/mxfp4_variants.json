@@ -1,0 +1,112 @@
+{
+  "setup": {
+    "model": "google/gemma-3-1b-it",
+    "device": "mps",
+    "dropin_configs": [
+      "rtn4_g32",
+      "rtn4_g8",
+      "mxfp4",
+      "mxfp4opt1",
+      "hadmxfp4"
+    ],
+    "awq_configs": [
+      "awq-mxfp4opt1"
+    ],
+    "input_sets": [
+      "self_s2",
+      "real_text"
+    ],
+    "calib_shape": [
+      4,
+      32
+    ]
+  },
+  "results": {
+    "self_s2": [
+      {
+        "config": "rtn4_g32",
+        "output_kl": 0.3181883692741394,
+        "max_mse": 5548.076171875,
+        "worst_layer": 25
+      },
+      {
+        "config": "rtn4_g8",
+        "output_kl": 0.1597089022397995,
+        "max_mse": 2614.4677734375,
+        "worst_layer": 25
+      },
+      {
+        "config": "mxfp4",
+        "output_kl": 0.33965030312538147,
+        "max_mse": 5914.07421875,
+        "worst_layer": 25
+      },
+      {
+        "config": "mxfp4opt1",
+        "output_kl": 0.25794485211372375,
+        "max_mse": 5235.248046875,
+        "worst_layer": 25
+      },
+      {
+        "config": "hadmxfp4",
+        "output_kl": 0.39852866530418396,
+        "max_mse": 5982.689453125,
+        "worst_layer": 25
+      },
+      {
+        "config": "awq-mxfp4opt1",
+        "output_kl": 0.2719803750514984,
+        "max_mse": 4816.93994140625,
+        "worst_layer": 25,
+        "alpha_hist": {
+          "0.0": 45,
+          "0.5": 107,
+          "1.0": 4
+        }
+      }
+    ],
+    "real_text": [
+      {
+        "config": "rtn4_g32",
+        "output_kl": 0.11995095759630203,
+        "max_mse": 3455.632080078125,
+        "worst_layer": 25
+      },
+      {
+        "config": "rtn4_g8",
+        "output_kl": 0.08174923807382584,
+        "max_mse": 1718.77001953125,
+        "worst_layer": 25
+      },
+      {
+        "config": "mxfp4",
+        "output_kl": 0.2241109162569046,
+        "max_mse": 4004.314208984375,
+        "worst_layer": 25
+      },
+      {
+        "config": "mxfp4opt1",
+        "output_kl": 0.1632654219865799,
+        "max_mse": 4590.861328125,
+        "worst_layer": 25
+      },
+      {
+        "config": "hadmxfp4",
+        "output_kl": 0.24643905460834503,
+        "max_mse": 5293.0810546875,
+        "worst_layer": 25
+      },
+      {
+        "config": "awq-mxfp4opt1",
+        "output_kl": 0.11822612583637238,
+        "max_mse": 4037.0771484375,
+        "worst_layer": 25,
+        "alpha_hist": {
+          "0.0": 45,
+          "0.5": 107,
+          "1.0": 4
+        }
+      }
+    ]
+  }
+}

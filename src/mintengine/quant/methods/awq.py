@@ -25,6 +25,7 @@ preceding norm; here we just multiply.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from typing import Any
 
 import torch
 import torch.nn as nn
@@ -35,14 +36,30 @@ from mintengine.quant.methods.rtn import RTN
 
 @dataclass
 class AWQConfig:
+    """AWQ over an arbitrary inner quant method.
+
+    method     : any QuantMethod (.pack(W)['w'] returns dequantized weight).
+                 If None, falls back to RTN(bits, group_size).
+    bits / group_size : legacy fields used only when method is None.
+    alpha_grid : per-input-channel exponent grid; 0.0 = no scaling (== plain quant).
+    """
+
     bits: int = 4
     group_size: int | None = 128
     alpha_grid: tuple[float, ...] = (0.0, 0.25, 0.5, 0.75, 1.0)
+    method: Any | None = None
 
     @property
     def name(self) -> str:
+        if self.method is not None:
+            return f"awq-{self.method.name}"
         g = "row" if self.group_size is None else f"g{self.group_size}"
         return f"awq{self.bits}-{g}"
+
+    def _make_method(self):
+        if self.method is not None:
+            return self.method
+        return RTN(bits=self.bits, group_size=self.group_size)
 
 
 class AWQLinear(nn.Module):
@@ -56,7 +73,10 @@ class AWQLinear(nn.Module):
         self.register_buffer("inv_scale", 1.0 / scale)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        return F.linear(x * self.inv_scale, self.w_q)
+        # inv_scale stored in fp32 for numerical stability of the per-channel
+        # rescale; cast to x's dtype right before the multiply so F.linear sees
+        # matching dtypes between activations and weights.
+        return F.linear(x * self.inv_scale.to(x.dtype), self.w_q)
 
 
 def _collect_activation_magnitudes(
@@ -106,7 +126,7 @@ def _best_alpha(
     cfg: AWQConfig,
 ) -> tuple[float, torch.Tensor, torch.Tensor]:
     """Grid-search alpha; return (alpha*, w_q*, scale*)."""
-    rtn = RTN(bits=cfg.bits, group_size=cfg.group_size)
+    inner = cfg._make_method()
     # FP reference output on calib batch
     with torch.no_grad():
         y_ref = F.linear(calib_x, weight)
@@ -120,7 +140,7 @@ def _best_alpha(
             s = s / s.mean()
             s = s.clamp(min=1e-4)
         w_scaled = weight * s
-        w_q = rtn.pack(w_scaled)["w"]
+        w_q = inner.pack(w_scaled)["w"]
         with torch.no_grad():
             y_q = F.linear(calib_x * (1.0 / s), w_q)
             loss = F.mse_loss(y_q.float(), y_ref.float()).item()
@@ -179,10 +199,10 @@ def apply_awq(
             if isinstance(child, nn.Linear):
                 weight = child.weight.detach()
                 if full not in act_mag or full not in calib_x:
-                    # Layer never ran during calibration — fall back to RTN equivalent
+                    # Layer never ran during calibration — quantize with no scaling
                     s = torch.ones(weight.shape[1], device=weight.device,
                                     dtype=torch.float32)
-                    w_q = RTN(bits=cfg.bits, group_size=cfg.group_size).pack(weight)["w"]
+                    w_q = cfg._make_method().pack(weight)["w"]
                     chosen[full] = 0.0
                 else:
                     x = calib_x[full].to(weight.device).to(weight.dtype)

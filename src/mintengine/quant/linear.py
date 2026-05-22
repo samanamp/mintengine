@@ -93,13 +93,16 @@ def restore_fp(
     snapshot: dict[str, nn.Linear],
     _prefix: str = "",
 ) -> nn.Module:
-    """In-place: swap every QLinear back to its original nn.Linear from snapshot."""
+    """In-place: swap every quantized-Linear stand-in back to the FP nn.Linear.
+
+    Handles QLinear (apply_quant) and any other replacement registered in the
+    snapshot (e.g. AWQLinear from apply_awq) — we just check whether the path
+    has an entry and the child is no longer the snapshot's nn.Linear instance.
+    """
     for name, child in list(module.named_children()):
         full = f"{_prefix}.{name}" if _prefix else name
-        if isinstance(child, QLinear):
-            if full not in snapshot:
-                raise KeyError(f"no snapshot for {full!r}; cannot restore")
+        if full in snapshot and child is not snapshot[full]:
             setattr(module, name, snapshot[full])
-        else:
+        elif not isinstance(child, nn.Linear):
             restore_fp(child, snapshot, full)
     return module
