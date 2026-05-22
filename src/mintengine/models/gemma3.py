@@ -234,18 +234,27 @@ class Gemma3MLP(nn.Module):
         super().__init__()
         self.weights: MLPWeights = weights
         [self.hidden_size, self.intermediate_size] = weights.down_proj.shape
-        self.gate_up_proj_w = torch.concat(
-            (self.weights.gate_proj, self.weights.up_proj)
-        ).T
+
+        gate_up_w = torch.cat((weights.gate_proj, weights.up_proj), dim=0)
+        device = gate_up_w.device
+        self.gate_up_proj = nn.Linear(
+            gate_up_w.shape[1], gate_up_w.shape[0], bias=False, device=device
+        )
+        self.gate_up_proj.weight.data = gate_up_w
+
+        self.down_proj = nn.Linear(
+            self.intermediate_size, self.hidden_size, bias=False, device=device
+        )
+        self.down_proj.weight.data = weights.down_proj
+
         self.activation_func = nn.GELU(approximate="tanh")
 
     def forward(self, x):
         # MLP(x) = W_down( GELU(W_gate x) * (W_up x) )
-        gate_up_proj = torch.matmul(x, self.gate_up_proj_w)
-        g, u = torch.split(gate_up_proj, self.intermediate_size, dim=-1)
+        gate_up = self.gate_up_proj(x)
+        g, u = torch.split(gate_up, self.intermediate_size, dim=-1)
         g = self.activation_func(g)
-        x = torch.matmul(g * u, self.weights.down_proj.T)
-        return x
+        return self.down_proj(g * u)
 
 
 class Gemma3Layer(nn.Module):
