@@ -6,9 +6,13 @@ from huggingface_hub import snapshot_download
 def get_hf_model(model_id: str = "google/gemma-3-1b-it"):
     model_id = "google/gemma-3-1b-it"
     local_dir = Path.home() / "models" / model_id
-    local_dir.mkdir(parents=True, exist_ok=True)
-
-    model_path = snapshot_download(model_id, local_dir=local_dir)
+    try:
+        local_dir.mkdir(parents=True, exist_ok=True)
+        model_path = snapshot_download(model_id, local_dir=local_dir)
+    except (PermissionError, OSError):
+        # ~/models may be blocked by TCC/MDM on some macs — fall back to
+        # the default HF cache, which is sandbox-friendly.
+        model_path = snapshot_download(model_id)
 
     print("\nModel downloaded to:", model_path)
     return model_path
