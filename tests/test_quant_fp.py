@@ -19,7 +19,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 from mintengine.models.gemma3 import Gemma3MLP  # noqa: E402
 from mintengine.models.gemma3_weights import MLPWeights  # noqa: E402
-from mintengine.quant import FP, QLinear, apply_quant  # noqa: E402
+from mintengine.quant import FP, QLinear, apply_quant, restore_fp, snapshot_linears  # noqa: E402
+from mintengine.quant.methods import RTN  # noqa: E402
 
 
 def _assert_identical(a: torch.Tensor, b: torch.Tensor, label: str) -> None:
@@ -107,12 +108,53 @@ def test_fp_gemma3_mlp() -> None:
     _assert_identical(y_ref, y_q, "Gemma3MLP (gate_up + down)")
 
 
+def test_where_filter_skips() -> None:
+    """`where` should restrict apply_quant to a subset of Linears."""
+    torch.manual_seed(3)
+    model = nn.Sequential(
+        nn.Linear(16, 32, bias=False),
+        nn.Linear(32, 16, bias=False),
+    )
+    # only quantize the second linear (path "1")
+    apply_quant(model, RTN(bits=2), where=lambda path, _: path == "1")
+    types = [type(m).__name__ for m in model]
+    assert types[0] == "Linear", f"first layer should be untouched, got {types[0]}"
+    assert types[1] == "QLinear", f"second layer should be QLinear, got {types[1]}"
+    print(f"  ok  where-filter: types = {types}")
+
+
+def test_snapshot_restore_roundtrip() -> None:
+    """snapshot -> apply_quant(RTN2) -> restore_fp must reproduce FP outputs."""
+    torch.manual_seed(4)
+    model = nn.Sequential(
+        nn.Linear(24, 48, bias=False),
+        nn.GELU(),
+        nn.Linear(48, 24, bias=False),
+    )
+    x = torch.randn(2, 6, 24)
+    y_ref = model(x)
+
+    snap = snapshot_linears(model)
+    apply_quant(model, RTN(bits=2))
+    y_q = model(x)
+    if torch.equal(y_ref, y_q):
+        raise AssertionError("RTN@2bit should perturb output but didn't")
+
+    restore_fp(model, snap)
+    y_restored = model(x)
+    _assert_identical(y_ref, y_restored, "snapshot/restore roundtrip")
+    types = [type(m).__name__ for m in model]
+    assert "QLinear" not in types, f"restore left QLinears behind: {types}"
+
+
 def main() -> int:
     tests = [
         test_fp_single_linear,
         test_fp_sequential_walked,
         test_mlp_refactor_matches_old_formulation,
         test_fp_gemma3_mlp,
+        test_where_filter_skips,
+        test_snapshot_restore_roundtrip,
     ]
     failed = 0
     for t in tests:

@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from typing import Protocol
+from typing import Callable, Protocol
 
 import torch
 import torch.nn as nn
@@ -55,11 +55,51 @@ class QLinear(nn.Module):
         return self.method.matmul(x, self._packed())
 
 
-def apply_quant(module: nn.Module, method: QuantMethod) -> nn.Module:
-    """In-place: replace every nn.Linear descendant with QLinear(linear, method)."""
+WhereFn = Callable[[str, nn.Linear], bool]
+
+
+def apply_quant(
+    module: nn.Module,
+    method: QuantMethod,
+    where: WhereFn | None = None,
+    _prefix: str = "",
+) -> nn.Module:
+    """In-place: replace every nn.Linear descendant with QLinear(linear, method).
+
+    `where(path, linear) -> bool` optionally restricts which linears are touched.
+    When None (default), every nn.Linear descendant is quantized.
+    """
     for name, child in list(module.named_children()):
+        full = f"{_prefix}.{name}" if _prefix else name
         if isinstance(child, nn.Linear):
-            setattr(module, name, QLinear(child, method))
+            if where is None or where(full, child):
+                setattr(module, name, QLinear(child, method))
         else:
-            apply_quant(child, method)
+            apply_quant(child, method, where, full)
+    return module
+
+
+def snapshot_linears(module: nn.Module) -> dict[str, nn.Linear]:
+    """Capture references to every nn.Linear in the module tree, keyed by path.
+
+    Pair with restore_fp() to make apply_quant reversible across many
+    experiments on a single model load.
+    """
+    return {n: m for n, m in module.named_modules() if isinstance(m, nn.Linear)}
+
+
+def restore_fp(
+    module: nn.Module,
+    snapshot: dict[str, nn.Linear],
+    _prefix: str = "",
+) -> nn.Module:
+    """In-place: swap every QLinear back to its original nn.Linear from snapshot."""
+    for name, child in list(module.named_children()):
+        full = f"{_prefix}.{name}" if _prefix else name
+        if isinstance(child, QLinear):
+            if full not in snapshot:
+                raise KeyError(f"no snapshot for {full!r}; cannot restore")
+            setattr(module, name, snapshot[full])
+        else:
+            restore_fp(child, snapshot, full)
     return module

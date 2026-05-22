@@ -328,7 +328,7 @@ class Gemma3Layer(nn.Module):
 
         x, residual = self.pre_feedforward_layernorm(x, residual)
         vals: torch.Tensor = x[0, :, :]
-        if self.layer_id in x[0, 1]:
+        if self.layer_id in [0, 1]:
             vals = vals.max(dim=0).values - vals.min(dim=0).values
             print(
                 f"preffn-norm: :-{self.layer_id}",
